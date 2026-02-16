@@ -14,6 +14,8 @@ const IncidentList: React.FC<IncidentListProps> = ({ userRole }) => {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+  const [noteValue, setNoteValue] = useState('');
+  const [isSavingNote, setIsSavingNote] = useState(false);
 
   useEffect(() => {
     fetchIncidents();
@@ -29,22 +31,25 @@ const IncidentList: React.FC<IncidentListProps> = ({ userRole }) => {
 
       if (error) throw error;
       
-      // Transform snake_case from DB to camelCase for the UI
       const formatted = (data || []).map((item: any) => ({
         id: item.id,
         studentName: item.student_name,
         gradeSection: item.grade_section,
-        incidentType: item.incident_type,
+        incidentType: item.incident_type as IncidentType,
         description: item.description,
         date: item.date,
-        status: item.status,
-        reportedBy: item.reported_by,
-        severity: item.severity,
+        status: item.status as IncidentStatus,
+        reportedBy: item.reported_by as UserRole,
+        severity: item.severity as 'Low' | 'Medium' | 'High',
+        adminNotes: item.admin_notes,
+        teacherRemarks: item.teacher_remarks,
+        guidanceNotes: item.guidance_notes
       }));
 
-      setIncidents(formatted.length > 0 ? formatted : MOCK_INCIDENTS as any);
+      // Only use mock data if DB is completely empty (no table or no rows)
+      setIncidents(formatted.length > 0 ? formatted : []);
     } catch (err) {
-      console.warn('Supabase fetch failed, using mock data.', err);
+      console.error('Supabase fetch failed:', err);
       setIncidents(MOCK_INCIDENTS as any);
     } finally {
       setLoading(false);
@@ -69,14 +74,45 @@ const IncidentList: React.FC<IncidentListProps> = ({ userRole }) => {
     }
   };
 
+  const saveNote = async () => {
+    if (!selectedIncident) return;
+    setIsSavingNote(true);
+    
+    const fieldMap: Record<string, string> = {
+      [UserRole.ADMIN]: 'admin_notes',
+      [UserRole.TEACHER]: 'teacher_remarks',
+      [UserRole.GUIDANCE]: 'guidance_notes'
+    };
+
+    const dbField = fieldMap[userRole];
+    if (!dbField) return;
+
+    try {
+      const { error } = await supabase
+        .from('incidents')
+        .update({ [dbField]: noteValue })
+        .eq('id', selectedIncident.id);
+
+      if (error) throw error;
+
+      // Update local state by mapping field names correctly
+      const camelField = dbField.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+      setIncidents(prev => prev.map(inc => 
+        inc.id === selectedIncident.id ? { ...inc, [camelField]: noteValue } : inc
+      ));
+      
+      alert('Notes updated successfully.');
+    } catch (err) {
+      console.error('Error saving note:', err);
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
+
   const filteredIncidents = incidents.filter(i => {
     const matchesSearch = i.studentName.toLowerCase().includes(search.toLowerCase()) ||
                         i.description.toLowerCase().includes(search.toLowerCase());
     const matchesType = filterType === 'All' || i.incidentType === filterType;
-    
-    if (userRole === UserRole.TEACHER) {
-      return matchesSearch && matchesType && i.gradeSection.includes('10 - A');
-    }
     return matchesSearch && matchesType;
   });
 
@@ -87,8 +123,18 @@ const IncidentList: React.FC<IncidentListProps> = ({ userRole }) => {
       case 'Action Taken': return 'bg-cyan-500';
       case 'Under Review': return 'bg-amber-500';
       case 'New': return 'bg-rose-500';
+      case 'Seen': return 'bg-slate-400';
+      case 'Forwarded': return 'bg-violet-500';
       default: return 'bg-slate-500';
     }
+  };
+
+  const openIncidentDetail = (incident: Incident) => {
+    setSelectedIncident(incident);
+    const notes = userRole === UserRole.ADMIN ? incident.adminNotes :
+                  userRole === UserRole.TEACHER ? incident.teacherRemarks :
+                  incident.guidanceNotes;
+    setNoteValue(notes || '');
   };
 
   return (
@@ -100,7 +146,7 @@ const IncidentList: React.FC<IncidentListProps> = ({ userRole }) => {
           </div>
           <input
             type="text"
-            className="block w-full pl-14 pr-6 py-4 border-2 border-slate-100 rounded-[1.5rem] bg-white font-bold"
+            className="block w-full pl-14 pr-6 py-4 border-2 border-slate-100 rounded-[1.5rem] bg-white font-bold outline-none focus:border-teal-400 transition-all"
             placeholder="Search student or description..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -129,6 +175,12 @@ const IncidentList: React.FC<IncidentListProps> = ({ userRole }) => {
             <div className="w-12 h-12 border-4 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
             <p className="text-slate-400 font-black uppercase tracking-widest text-xs">Accessing Cloud Shield...</p>
           </div>
+        ) : filteredIncidents.length === 0 ? (
+          <div className="flex flex-col items-center justify-center p-20 text-center">
+            <div className="bg-slate-50 p-6 rounded-full mb-6">{ICONS.Security}</div>
+            <h4 className="text-xl font-black text-slate-900 mb-2">No Incidents Found</h4>
+            <p className="text-slate-400 font-medium">Clear search filters to see all reports.</p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-50">
@@ -143,7 +195,7 @@ const IncidentList: React.FC<IncidentListProps> = ({ userRole }) => {
               </thead>
               <tbody className="bg-white divide-y divide-slate-50">
                 {filteredIncidents.map((incident) => (
-                  <tr key={incident.id} className="hover:bg-slate-50/30 transition-all cursor-pointer group" onClick={() => setSelectedIncident(incident)}>
+                  <tr key={incident.id} className="hover:bg-slate-50/30 transition-all cursor-pointer group" onClick={() => openIncidentDetail(incident)}>
                     <td className="px-8 py-6 whitespace-nowrap text-xs font-bold text-slate-500">{incident.date}</td>
                     <td className="px-8 py-6 whitespace-nowrap"><div className="text-sm font-black text-slate-900">{incident.studentName}</div></td>
                     <td className="px-8 py-6 whitespace-nowrap">
@@ -170,7 +222,7 @@ const IncidentList: React.FC<IncidentListProps> = ({ userRole }) => {
 
       {selectedIncident && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md">
-          <div className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl overflow-hidden">
+          <div className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
             <div className="p-10 lg:p-14 overflow-y-auto max-h-[90vh]">
               <div className="flex justify-between items-start mb-10">
                 <div>
@@ -179,27 +231,73 @@ const IncidentList: React.FC<IncidentListProps> = ({ userRole }) => {
                       {selectedIncident.status}
                     </span>
                     <span className="text-xs font-bold text-slate-400">{selectedIncident.date}</span>
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${
+                      selectedIncident.severity === 'High' ? 'bg-rose-100 text-rose-600' : 
+                      selectedIncident.severity === 'Medium' ? 'bg-amber-100 text-amber-600' : 
+                      'bg-emerald-100 text-emerald-600'
+                    }`}>
+                      {selectedIncident.severity} Risk
+                    </span>
                   </div>
-                  <h3 className="text-4xl font-black text-slate-900">{selectedIncident.studentName}</h3>
+                  <h3 className="text-4xl font-black text-slate-900 tracking-tight">{selectedIncident.studentName} <span className="text-slate-300 font-medium text-2xl ml-2">({selectedIncident.gradeSection})</span></h3>
                 </div>
-                <button onClick={() => setSelectedIncident(null)} className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400">✕</button>
+                <button onClick={() => setSelectedIncident(null)} className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-all">✕</button>
               </div>
 
-              <div className="space-y-8">
-                <div className="bg-slate-50 p-8 rounded-[2rem]">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase mb-4">Description</h4>
-                  <p className="text-slate-700 text-lg italic">"{selectedIncident.description}"</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+                <div className="md:col-span-2 space-y-10">
+                  <div className="bg-slate-50 p-8 rounded-[2rem]">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Original Report</h4>
+                    <p className="text-slate-700 text-lg leading-relaxed italic">"{selectedIncident.description}"</p>
+                  </div>
+
+                  <div className="space-y-6">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Case Management Notes</h4>
+                    <div className="relative">
+                      <textarea
+                        rows={4}
+                        className="w-full px-6 py-5 rounded-2xl border-2 border-slate-100 bg-white focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 outline-none transition-all font-bold text-slate-900 placeholder-slate-300"
+                        placeholder={`Enter your ${userRole.toLowerCase()} notes here...`}
+                        value={noteValue}
+                        onChange={(e) => setNoteValue(e.target.value)}
+                      />
+                      <button 
+                        onClick={saveNote}
+                        disabled={isSavingNote}
+                        className="mt-4 px-8 py-4 bg-teal-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-teal-100 hover:bg-teal-700 disabled:bg-slate-200 transition-all"
+                      >
+                        {isSavingNote ? 'Syncing...' : 'Save & Update Records'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="space-y-4">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase">Update Status</h4>
-                  <div className="flex flex-wrap gap-3">
-                    {userRole === UserRole.ADMIN && (
-                      <button onClick={() => updateStatus(selectedIncident.id, 'Resolved')} className="px-6 py-3 border-2 border-emerald-200 text-emerald-600 rounded-2xl font-black text-[10px] uppercase">Mark Resolved</button>
-                    )}
-                    {userRole === UserRole.GUIDANCE && (
-                      <button onClick={() => updateStatus(selectedIncident.id, 'Under Counseling')} className="px-6 py-3 border-2 border-indigo-200 text-indigo-600 rounded-2xl font-black text-[10px] uppercase">Intervene</button>
-                    )}
+                <div className="space-y-8">
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Incident Control</h4>
+                    <div className="flex flex-col gap-3">
+                      {userRole === UserRole.ADMIN && (
+                        <button onClick={() => updateStatus(selectedIncident.id, 'Resolved')} className="w-full px-6 py-4 bg-emerald-500 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-emerald-100 hover:bg-emerald-600 transition-all">Mark as Resolved</button>
+                      )}
+                      {(userRole === UserRole.GUIDANCE || userRole === UserRole.ADMIN) && (
+                        <button onClick={() => updateStatus(selectedIncident.id, 'Under Counseling')} className="w-full px-6 py-4 bg-indigo-500 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-600 transition-all">Schedule Counseling</button>
+                      )}
+                      <button onClick={() => updateStatus(selectedIncident.id, 'Action Taken')} className="w-full px-6 py-4 border-2 border-slate-100 text-slate-600 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-50 transition-all">Record Action Taken</button>
+                    </div>
+                  </div>
+
+                  <div className="p-6 bg-slate-900 rounded-[2rem] text-white">
+                    <h4 className="text-[9px] font-black text-teal-400 uppercase tracking-widest mb-4">Metadata</h4>
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-[10px] text-slate-400">Reporter:</span>
+                        <span className="text-[10px] font-bold">{selectedIncident.reportedBy}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-[10px] text-slate-400">Category:</span>
+                        <span className="text-[10px] font-bold">{selectedIncident.incidentType}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

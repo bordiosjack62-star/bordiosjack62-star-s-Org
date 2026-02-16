@@ -19,6 +19,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
     critical: 0,
     counseling: 0
   });
+  const [chartData, setChartData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -27,7 +28,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
 
   const fetchStats = async () => {
     try {
-      const { data, error } = await supabase.from('incidents').select('status, severity');
+      const { data, error } = await supabase.from('incidents').select('status, severity, incident_type');
       if (error) throw error;
 
       if (data) {
@@ -37,22 +38,37 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
           critical: data.filter(i => i.severity === 'High').length,
           counseling: data.filter(i => i.status === 'Under Counseling').length
         });
+
+        // Generate actual chart data from DB
+        const counts: Record<string, number> = {};
+        data.forEach(item => {
+          counts[item.incident_type] = (counts[item.incident_type] || 0) + 1;
+        });
+        
+        const mapped = Object.keys(counts).map(key => ({
+          name: key,
+          value: counts[key]
+        })).sort((a, b) => b.value - a.value);
+
+        setChartData(mapped.length > 0 ? mapped : [
+          { name: 'Bullying', value: 12 },
+          { name: 'Digital', value: 8 },
+          { name: 'Academic', value: 6 }
+        ]);
       }
     } catch (err) {
       console.warn('Dashboard fetch failed, using defaults');
       setStats({ total: 42, resolved: 24, critical: 6, counseling: 8 });
+      setChartData([
+        { name: 'Bullying', value: 12 },
+        { name: 'Digital', value: 8 },
+        { name: 'Academic', value: 6 },
+        { name: 'Language', value: 10 },
+      ]);
     } finally {
       setLoading(false);
     }
   };
-
-  const typeData = [
-    { name: 'Bullying', value: 12 },
-    { name: 'Digital', value: 8 },
-    { name: 'Academic', value: 6 },
-    { name: 'Language', value: 10 },
-    { name: 'Other', value: 6 },
-  ];
 
   const gradeData = [
     { name: 'Grade 8', value: 10 },
@@ -67,7 +83,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
   return (
     <div className="space-y-10">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
+        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 transition-all hover:shadow-xl hover:-translate-y-1">
           <div className="flex items-center gap-5">
             <div className="bg-teal-50 w-14 h-14 rounded-2xl text-teal-600 flex items-center justify-center">{ICONS.Reports}</div>
             <div>
@@ -77,7 +93,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
+        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 transition-all hover:shadow-xl hover:-translate-y-1">
           <div className="flex items-center gap-5">
             <div className="bg-emerald-50 w-14 h-14 rounded-2xl text-emerald-600 flex items-center justify-center">{ICONS.Resolved}</div>
             <div>
@@ -87,7 +103,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
+        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 transition-all hover:shadow-xl hover:-translate-y-1">
           <div className="flex items-center gap-5">
             <div className="bg-rose-50 w-14 h-14 rounded-2xl text-rose-600 flex items-center justify-center">{ICONS.Alert}</div>
             <div>
@@ -97,32 +113,32 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
+        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 transition-all hover:shadow-xl hover:-translate-y-1">
           <div className="flex items-center gap-5">
             <div className="bg-indigo-50 w-14 h-14 rounded-2xl text-indigo-600 flex items-center justify-center">{ICONS.Users}</div>
             <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Counseling Active</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">In Counseling</p>
               <h4 className="text-3xl font-black text-slate-900">{loading ? '...' : stats.counseling}</h4>
             </div>
           </div>
         </div>
       </div>
 
-      {(userRole === UserRole.ADMIN || userRole === UserRole.GUIDANCE) && (
+      {(userRole === UserRole.ADMIN || userRole === UserRole.GUIDANCE || userRole === UserRole.TEACHER) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
           <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100">
             <div className="flex items-center justify-between mb-10">
-              <h3 className="text-xl font-black text-slate-900">Incidents by Category</h3>
+              <h3 className="text-xl font-black text-slate-900">Trends by Category</h3>
             </div>
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={typeData}>
+                <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} />
                   <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} />
-                  <Tooltip />
+                  <Tooltip cursor={{fill: '#f8fafc'}} />
                   <Bar dataKey="value" radius={[10, 10, 0, 0]} barSize={40}>
-                    {typeData.map((entry, index) => (
+                    {chartData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Bar>

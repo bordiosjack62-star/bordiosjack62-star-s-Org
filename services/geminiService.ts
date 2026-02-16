@@ -20,7 +20,7 @@ export async function analyzeIncident(description: string) {
             },
             severity: {
               type: Type.STRING,
-              description: "The level of urgency/severity.",
+              description: "The level of urgency: 'Low', 'Medium', or 'High'.",
             },
             reasoning: {
               type: Type.STRING,
@@ -32,7 +32,17 @@ export async function analyzeIncident(description: string) {
       },
     });
 
-    return JSON.parse(response.text || "{}");
+    const result = JSON.parse(response.text || "{}");
+    
+    // Sanitize severity to match expected casing
+    if (result.severity) {
+      const s = result.severity.toLowerCase();
+      if (s === 'low') result.severity = 'Low';
+      else if (s === 'high') result.severity = 'High';
+      else result.severity = 'Medium';
+    }
+
+    return result;
   } catch (error) {
     console.error("Gemini analysis failed:", error);
     return null;

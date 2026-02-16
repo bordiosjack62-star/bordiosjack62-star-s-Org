@@ -26,11 +26,16 @@ const IncidentForm: React.FC<IncidentFormProps> = ({ onSuccess, userRole }) => {
   const handleAiAnalyze = async () => {
     if (formData.description.length < 10) return;
     setAiAnalyzing(true);
-    const result = await analyzeIncident(formData.description);
-    if (result) {
-      setAiSuggestion(result);
+    try {
+      const result = await analyzeIncident(formData.description);
+      if (result) {
+        setAiSuggestion(result);
+      }
+    } catch (err) {
+      console.error("AI Analysis error:", err);
+    } finally {
+      setAiAnalyzing(false);
     }
-    setAiAnalyzing(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -53,10 +58,9 @@ const IncidentForm: React.FC<IncidentFormProps> = ({ onSuccess, userRole }) => {
 
       if (error) throw error;
       onSuccess();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving incident:', err);
-      // Fallback if table doesn't exist yet for demo purposes
-      onSuccess();
+      alert(`Error: ${err.message || 'Failed to submit report. Please check your connection.'}`);
     } finally {
       setLoading(false);
     }
