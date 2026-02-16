@@ -1,7 +1,8 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { UserRole } from '../types';
 import { ICONS, APP_NAME } from '../constants';
+import { checkConnection } from '../services/supabaseClient';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -12,6 +13,18 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children, userRole, onLogout, currentView, setCurrentView }) => {
+  const [isLive, setIsLive] = useState(false);
+
+  useEffect(() => {
+    const ping = async () => {
+      const connected = await checkConnection();
+      setIsLive(connected);
+    };
+    ping();
+    const interval = setInterval(ping, 30000); // Check every 30s
+    return () => clearInterval(interval);
+  }, []);
+
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: ICONS.Dashboard, roles: [UserRole.ADMIN, UserRole.TEACHER, UserRole.GUIDANCE] },
     { id: 'reports', label: 'Safety Log', icon: ICONS.Reports, roles: [UserRole.ADMIN, UserRole.TEACHER, UserRole.GUIDANCE] },
@@ -29,7 +42,10 @@ const Layout: React.FC<LayoutProps> = ({ children, userRole, onLogout, currentVi
           </div>
           <div>
             <h1 className="text-2xl font-black tracking-tighter leading-none">{APP_NAME}</h1>
-            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-teal-500/80">Protection Engine</span>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-teal-500 animate-pulse' : 'bg-slate-600'}`}></span>
+              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">{isLive ? 'Live Sync Active' : 'Offline Mode'}</span>
+            </div>
           </div>
         </div>
 
@@ -77,8 +93,10 @@ const Layout: React.FC<LayoutProps> = ({ children, userRole, onLogout, currentVi
           <div>
             <h2 className="text-3xl font-black text-slate-900 tracking-tight capitalize">{currentView.replace('-', ' ')}</h2>
             <div className="flex items-center gap-3 mt-2">
-              <span className="flex h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Protection System</span>
+              <span className={`flex h-2 w-2 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-slate-300'} shadow-[0_0_8px_rgba(16,185,129,0.5)]`}></span>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                {isLive ? 'Cloud Protection Secured' : 'Local Storage Only'}
+              </span>
             </div>
           </div>
           <div className="flex items-center gap-8">

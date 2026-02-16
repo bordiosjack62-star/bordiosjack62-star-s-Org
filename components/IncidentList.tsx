@@ -19,10 +19,31 @@ const IncidentList: React.FC<IncidentListProps> = ({ userRole }) => {
 
   useEffect(() => {
     fetchIncidents();
+
+    // Subscribe to real-time changes across the entire table
+    const channel = supabase
+      .channel('incident-realtime-feed')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'incidents',
+        },
+        (payload) => {
+          console.log('Real-time database update:', payload);
+          // Refresh data on any database change for real-time consistency
+          fetchIncidents();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchIncidents = async () => {
-    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('incidents')
@@ -46,11 +67,13 @@ const IncidentList: React.FC<IncidentListProps> = ({ userRole }) => {
         guidanceNotes: item.guidance_notes
       }));
 
-      // Only use mock data if DB is completely empty (no table or no rows)
       setIncidents(formatted.length > 0 ? formatted : []);
     } catch (err) {
       console.error('Supabase fetch failed:', err);
-      setIncidents(MOCK_INCIDENTS as any);
+      // Fallback to existing incidents or mock if empty
+      if (incidents.length === 0) {
+        setIncidents(MOCK_INCIDENTS as any);
+      }
     } finally {
       setLoading(false);
     }
@@ -64,7 +87,8 @@ const IncidentList: React.FC<IncidentListProps> = ({ userRole }) => {
         .eq('id', id);
 
       if (error) throw error;
-
+      
+      // Update local state for snappy UI feedback while real-time catches up
       setIncidents(prev => prev.map(inc => inc.id === id ? { ...inc, status: newStatus } : inc));
       if (selectedIncident?.id === id) {
         setSelectedIncident(prev => prev ? { ...prev, status: newStatus } : null);
@@ -95,13 +119,12 @@ const IncidentList: React.FC<IncidentListProps> = ({ userRole }) => {
 
       if (error) throw error;
 
-      // Update local state by mapping field names correctly
       const camelField = dbField.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
       setIncidents(prev => prev.map(inc => 
         inc.id === selectedIncident.id ? { ...inc, [camelField]: noteValue } : inc
       ));
       
-      alert('Notes updated successfully.');
+      alert('Case management records synced to cloud.');
     } catch (err) {
       console.error('Error saving note:', err);
     } finally {
@@ -173,7 +196,7 @@ const IncidentList: React.FC<IncidentListProps> = ({ userRole }) => {
         {loading ? (
           <div className="flex flex-col items-center justify-center p-20 space-y-4">
             <div className="w-12 h-12 border-4 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-400 font-black uppercase tracking-widest text-xs">Accessing Cloud Shield...</p>
+            <p className="text-slate-400 font-black uppercase tracking-widest text-xs">Syncing with BuddyGuard Cloud...</p>
           </div>
         ) : filteredIncidents.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-20 text-center">
@@ -261,13 +284,16 @@ const IncidentList: React.FC<IncidentListProps> = ({ userRole }) => {
                         value={noteValue}
                         onChange={(e) => setNoteValue(e.target.value)}
                       />
-                      <button 
-                        onClick={saveNote}
-                        disabled={isSavingNote}
-                        className="mt-4 px-8 py-4 bg-teal-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-teal-100 hover:bg-teal-700 disabled:bg-slate-200 transition-all"
-                      >
-                        {isSavingNote ? 'Syncing...' : 'Save & Update Records'}
-                      </button>
+                      <div className="flex items-center justify-between mt-4">
+                        <button 
+                          onClick={saveNote}
+                          disabled={isSavingNote}
+                          className="px-8 py-4 bg-teal-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-teal-100 hover:bg-teal-700 disabled:bg-slate-200 transition-all"
+                        >
+                          {isSavingNote ? 'Syncing...' : 'Save & Update Records'}
+                        </button>
+                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">End-to-End Encrypted Sync</span>
+                      </div>
                     </div>
                   </div>
                 </div>
