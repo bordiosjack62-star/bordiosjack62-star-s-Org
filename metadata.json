@@ -1,0 +1,7 @@
+{
+  "name": "BuddyGuard",
+  "description": "A comprehensive school incident reporting and management platform designed for students, parents, and school administrators to ensure a safer learning environment.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
