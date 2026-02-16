@@ -1,14 +1,24 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Standardizing key access following @google/genai coding guidelines
+const initAI = () => {
+  const key = process.env.API_KEY;
+  if (!key) {
+    console.warn("BuddyGuard AI: process.env.API_KEY is missing. AI features will be disabled.");
+    return null;
+  }
+  return new GoogleGenAI({ apiKey: key });
+};
 
 export async function analyzeIncident(description: string) {
+  const ai = initAI();
+  if (!ai) return null;
+
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Analyze the following school incident description and suggest the most likely incident type and its severity (Low, Medium, High). 
-      Incident: "${description}"`,
+      contents: `Analyze this school incident: "${description}". Suggest category and severity (Low, Medium, High).`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -16,15 +26,15 @@ export async function analyzeIncident(description: string) {
           properties: {
             suggestedType: {
               type: Type.STRING,
-              description: "The most appropriate category for the incident.",
+              description: "The most appropriate category.",
             },
             severity: {
               type: Type.STRING,
-              description: "The level of urgency: 'Low', 'Medium', or 'High'.",
+              description: "Urgency level: 'Low', 'Medium', or 'High'.",
             },
             reasoning: {
               type: Type.STRING,
-              description: "Brief explanation for the choice.",
+              description: "Quick explanation.",
             }
           },
           required: ["suggestedType", "severity", "reasoning"],
@@ -34,17 +44,15 @@ export async function analyzeIncident(description: string) {
 
     const result = JSON.parse(response.text || "{}");
     
-    // Sanitize severity to match expected casing
+    // Normalize casing for the UI
     if (result.severity) {
       const s = result.severity.toLowerCase();
-      if (s === 'low') result.severity = 'Low';
-      else if (s === 'high') result.severity = 'High';
-      else result.severity = 'Medium';
+      result.severity = s.charAt(0).toUpperCase() + s.slice(1);
     }
 
     return result;
   } catch (error) {
-    console.error("Gemini analysis failed:", error);
+    console.error("BuddyGuard AI: Analysis failed", error);
     return null;
   }
 }

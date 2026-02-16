@@ -1,12 +1,12 @@
 
 import React, { useState } from 'react';
-import { UserRole } from './types';
-import Login from './components/Login';
-import Layout from './components/Layout';
-import Dashboard from './components/Dashboard';
-import IncidentForm from './components/IncidentForm';
-import IncidentList from './components/IncidentList';
-import UserManagement from './components/UserManagement';
+import { UserRole } from './types.ts';
+import Login from './components/Login.tsx';
+import Layout from './components/Layout.tsx';
+import Dashboard from './components/Dashboard.tsx';
+import IncidentForm from './components/IncidentForm.tsx';
+import IncidentList from './components/IncidentList.tsx';
+import UserManagement from './components/UserManagement.tsx';
 
 const App: React.FC = () => {
   const [userRole, setUserRole] = useState<UserRole | null>(null);

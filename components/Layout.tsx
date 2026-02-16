@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState } from 'react';
-import { UserRole } from '../types';
-import { ICONS, APP_NAME } from '../constants';
-import { checkConnection } from '../services/supabaseClient';
+import { UserRole } from '../types.ts';
+import { ICONS, APP_NAME } from '../constants.tsx';
+import { checkConnection } from '../services/supabaseClient.ts';
 
 interface LayoutProps {
   children: React.ReactNode;
